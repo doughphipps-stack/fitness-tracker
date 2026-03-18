@@ -430,7 +430,7 @@ import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteField, onSnapshot }
 
 const firebaseConfig = {
   apiKey: "AIzaSyAQ2Kyzpk63paZeU5FH8CtG7XqKioMECas",
-  authDomain: "doughphipps-stack.github.io",
+  authDomain: "free-fitness-tracker-doug.firebaseapp.com",
   projectId: "free-fitness-tracker-doug",
   storageBucket: "free-fitness-tracker-doug.firebasestorage.app",
   messagingSenderId: "35201931327",
@@ -1034,14 +1034,14 @@ function renderSets(){
         ? '<span class="ssep" style="color:var(--text2);font-size:13px">BW</span>'
           +'<span class="ssep">+</span>'
           +'<input type="number" id="sw-'+i+'" placeholder="0" value="'+(s.w||'')+'" min="0" title="Extra weight added (leave 0 for bodyweight only)" '
-          +'oninput="sets['+i+'].w=this.value" onkeydown="setEnterKey(event,'+i+','w')" style="max-width:80px">'
+          +'oninput="sets['+i+'].w=this.value" onkeydown="setEnterKey(event,'+i+',&quot;w&quot;)" style="max-width:80px">'
           +'<span class="ssep">lbs ×</span>'
         : '<input type="number" id="sw-'+i+'" placeholder="lbs" value="'+(s.w||'')+'" min="0" '
-          +'oninput="sets['+i+'].w=this.value" onkeydown="setEnterKey(event,'+i+','w')" style="max-width:85px">'
+          +'oninput="sets['+i+'].w=this.value" onkeydown="setEnterKey(event,'+i+',&quot;w&quot;)" style="max-width:85px">'
           +'<span class="ssep">lbs ×</span>'
       )
       +'<input type="number" id="sr-'+i+'" placeholder="reps" value="'+(s.r||'')+'" min="0" '
-      +'oninput="sets['+i+'].r=this.value" onkeydown="setEnterKey(event,'+i+','r')" style="max-width:80px">'
+      +'oninput="sets['+i+'].r=this.value" onkeydown="setEnterKey(event,'+i+',&quot;r&quot;)" style="max-width:80px">'
       +'<span class="ssep">reps</span>'
       +(sets.length>1?'<button class="delbtn" onclick="removeSet('+i+')">×</button>':'')
       +'</div>';
