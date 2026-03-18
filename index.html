@@ -423,7 +423,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged }
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
   from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteField, onSnapshot }
   from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
@@ -610,13 +610,16 @@ function fieldGoalOrDefault(id){ return fieldGoal(id); }
 window.signInWithGoogle=()=>{
   signInWithPopup(auth,gProv).catch(e=>{
     console.error('Sign-in error:',e.code,e.message);
-    toast('Sign-in failed: '+e.code);
+    if(e.code==='auth/popup-blocked'){
+      toast('Popup blocked — please allow popups for this site');
+    } else if(e.code==='auth/unauthorized-domain'){
+      toast('Domain not authorized — check Firebase settings');
+    } else {
+      toast('Sign-in failed: '+e.code);
+    }
   });
 };
 window.doSignOut=async()=>{if(!confirm('Sign out?'))return;if(unsubSnap){unsubSnap();unsubSnap=null;}await signOut(auth);};
-// Handle redirect result from mobile sign-in
-getRedirectResult(auth).catch(e=>{ if(e.code!=='auth/no-current-user') console.error('Redirect error:',e); });
-
 onAuthStateChanged(auth,user=>{
   hide('loading');
   if(user){
