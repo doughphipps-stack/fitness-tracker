@@ -339,7 +339,10 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
           <div id="strength-fields" style="margin-top:10px">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
               <span style="font-size:12px;color:var(--text2)">Sets <span style="color:var(--text3)">(Enter in reps → next set)</span></span>
-              <button class="btn btn-sm" onclick="addSet()">+ Set</button>
+              <div style="display:flex;gap:6px">
+                <button class="btn btn-sm" id="bw-toggle-btn" onclick="toggleBW()">Bodyweight</button>
+                <button class="btn btn-sm" onclick="addSet()">+ Set</button>
+              </div>
             </div>
             <div id="sets-wrap"></div>
           </div>
@@ -427,7 +430,7 @@ import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteField, onSnapshot }
 
 const firebaseConfig = {
   apiKey: "AIzaSyAQ2Kyzpk63paZeU5FH8CtG7XqKioMECas",
-  authDomain: "free-fitness-tracker-doug.firebaseapp.com",
+  authDomain: "doughphipps-stack.github.io",
   projectId: "free-fitness-tracker-doug",
   storageBucket: "free-fitness-tracker-doug.firebasestorage.app",
   messagingSenderId: "35201931327",
@@ -469,6 +472,23 @@ const EX_DB={
   'Full Body':['Bear Crawl','Burpee','Kettlebell Swing','Thruster','Turkish Get-Up']
 };
 const EX_CAT_MAP={};
+
+// Exercises that default to bodyweight
+const BODYWEIGHT_EXERCISES=new Set([
+  'pull-up','chin-up','push-up','chest dip','tricep dip','dip',
+  'diamond push-up','plank','sit-up','crunch','hanging leg raise',
+  'ab wheel rollout','dead bug','russian twist','bear crawl','burpee',
+  'muscle-up','pistol squat','handstand push-up','inverted row'
+]);
+
+function isBodyweight(name){ return BODYWEIGHT_EXERCISES.has((name||'').toLowerCase()); }
+
+// Format date as "Mar 15, 2026"
+function fmtDate(dateStr){
+  if(!dateStr) return '';
+  const d=new Date(dateStr+'T12:00:00');
+  return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+}
 Object.entries(EX_DB).forEach(([c,es])=>es.forEach(e=>{EX_CAT_MAP[e.toLowerCase()]=c;}));
 const CAT_TO_TYPE={'Chest':'Push (chest/shoulders/triceps)','Shoulders':'Push (chest/shoulders/triceps)','Triceps':'Push (chest/shoulders/triceps)','Back':'Pull (back/biceps)','Biceps':'Pull (back/biceps)','Legs':'Legs','Core':'Core','Cardio':'Cardio','Olympic':'Other','Full Body':'Full body'};
 const CARDIO_FIELDS={
@@ -588,12 +608,10 @@ function fieldGoalOrDefault(id){ return fieldGoal(id); }
 
 // ── AUTH ──
 window.signInWithGoogle=()=>{
-  const isMobile=/iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-  if(isMobile){
-    signInWithRedirect(auth,gProv).catch(()=>toast('Sign-in failed'));
-  } else {
-    signInWithPopup(auth,gProv).catch(()=>toast('Sign-in failed'));
-  }
+  signInWithPopup(auth,gProv).catch(e=>{
+    console.error('Sign-in error:',e.code,e.message);
+    toast('Sign-in failed: '+e.code);
+  });
 };
 window.doSignOut=async()=>{if(!confirm('Sign out?'))return;if(unsubSnap){unsubSnap();unsubSnap=null;}await signOut(auth);};
 // Handle redirect result from mobile sign-in
@@ -723,7 +741,7 @@ function renderDashboard(){
   const recentWeights=Object.values(D.weights).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,2);
   const allRecent=[...recentSessions.map(s=>({...s,_t:'session'})),...recentWeights.map(w=>({...w,_t:'weight'}))].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5);
   document.getElementById('dash-recent').innerHTML=allRecent.length?allRecent.map(item=>{
-    if(item._t==='weight') return `<div class="li"><div class="lil"><div class="lit">${item.value} lbs</div><div class="lis">${item.date} · weigh-in${item.note?' · '+item.note:''}</div></div></div>`;
+    if(item._t==='weight') return `<div class="li"><div class="lil"><div class="lit">${item.value} lbs</div><div class="lis">${fmtDate(item.date)} · weigh-in${item.note?' · '+item.note:''}</div></div></div>`;
     const exNames=item.exercises.map(e=>e.exercise).join(', ');
     return `<div class="li"><div class="lil"><div class="lit">${exNames}</div><div class="lis">${item.date} · ${item.exercises.length} exercise${item.exercises.length>1?'s':''}</div></div><span class="badge bb">${item.exercises.length} ex</span></div>`;
   }).join(''):'<div class="empty">Log something to see it here</div>';
@@ -785,7 +803,7 @@ function renderWeightTab(){
   const sorted=Object.values(D.weights).sort((a,b)=>b.date.localeCompare(a.date));
   document.getElementById('weight-log').innerHTML=sorted.length?sorted.map(w=>`
     <div class="li">
-      <div class="lil"><div class="lit">${w.value} lbs</div><div class="lis">${w.date}${w.note?' · '+w.note:''}</div></div>
+      <div class="lil"><div class="lit">${w.value} lbs</div><div class="lis">${fmtDate(w.date)}${w.note?' · '+w.note:''}</div></div>
       <div class="lir"><button class="editbtn" onclick="openModal('edit-weight','${w.id}')">Edit</button><button class="delbtn" onclick="del('weights','${w.id}')">×</button></div>
     </div>`).join(''):'<div class="empty">No weigh-ins yet</div>';
 }
@@ -830,7 +848,11 @@ window.addExerciseToSession=function(){
   // reset form
   document.getElementById('wo-name').value='';
   document.getElementById('wo-ex-notes').value='';
-  sets=[{w:'',r:''}];renderSets();
+  sets=[{w:'',r:''}];
+  currentExIsBW=false;
+  const bwBtn=document.getElementById('bw-toggle-btn');
+  if(bwBtn){bwBtn.textContent='Bodyweight';bwBtn.style.background='';bwBtn.style.color='';}
+  renderSets();
   document.getElementById('cardio-fields').style.display='none';
   document.getElementById('strength-fields').style.display='block';
   renderSessionList();
@@ -873,6 +895,7 @@ window.saveSession=function(){
       const vs=sets.filter(s=>s.w||s.r);
       if(!vs.length) return toast('Add at least one set');
       exObj.sets=vs;
+      exObj.isBodyweight=currentExIsBW;
     }
     currentSession=[exObj];
   }
@@ -976,7 +999,7 @@ function renderWorkoutLog(){
   if(!list.length){document.getElementById('wo-log').innerHTML='<div class="empty">No sessions yet</div>';return;}
   document.getElementById('wo-log').innerHTML=list.map(sess=>{
     const exRows=sess.exercises.map(e=>{
-      const summary=e.isCardio?formatCardio(e.exercise,e.cardioData||{}):(e.sets||[]).map(s=>s.w+'lbs×'+s.r).join(', ');
+      const summary=e.isCardio?formatCardio(e.exercise,e.cardioData||{}):(e.sets||[]).map(s=>e.isBodyweight?(s.w&&s.w!='0'?'+'+s.w+'lbs':'BW')+'×'+s.r:s.w+'lbs×'+s.r).join(', ');
       const enc=encodeURIComponent(e.exercise);
       return '<div style="display:flex;align-items:center;justify-content:space-between;font-size:12px;background:var(--bg2);border-radius:6px;padding:6px 10px;gap:8px;cursor:pointer" onclick="openModal(&quot;ex-history&quot;,&quot;'+enc+'&quot;)">'
         +'<span style="font-weight:500;flex-shrink:0">'+e.exercise+'</span>'
@@ -986,7 +1009,7 @@ function renderWorkoutLog(){
     }).join('');
     return '<div style="padding:10px 0;border-bottom:.5px solid var(--border)">'
       +'<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px">'
-      +'<div><span style="font-size:14px;font-weight:500">'+sess.date+'</span>'
+      +'<div><span style="font-size:14px;font-weight:500">'+fmtDate(sess.date)+'</span>'
       +'<span style="font-size:12px;color:var(--text3);margin-left:8px">'+sess.exercises.length+' exercise'+(sess.exercises.length!==1?'s':'')+'</span></div>'
       +'<div style="display:flex;align-items:center;gap:4px">'
       +'<button class="editbtn" onclick="openModal(&quot;edit-session&quot;,&quot;'+sess.id+'&quot;)">Edit</button>'
@@ -1000,18 +1023,37 @@ window.filterWo=(type,btn)=>{woFilter=type;document.querySelectorAll('#tab-worko
 function formatCardio(ex,d){const fields=CARDIO_FIELDS[ex]||CARDIO_FIELDS['_default'];return fields.filter(f=>d[f.id]).map(f=>`${d[f.id]}${f.unit?' '+f.unit:''}`).join(' · ')||'—';}
 
 // ── SETS ──
+let currentExIsBW=false;
+
 function renderSets(){
-  document.getElementById('sets-wrap').innerHTML=sets.map((s,i)=>`
-    <div class="sr">
-      <span class="sn">${i+1}</span>
-      <input type="number" id="sw-${i}" placeholder="lbs" value="${s.w}" min="0" oninput="sets[${i}].w=this.value" onkeydown="setEnterKey(event,${i},'w')" style="max-width:85px">
-      <span class="ssep">lbs ×</span>
-      <input type="number" id="sr-${i}" placeholder="reps" value="${s.r}" min="0" oninput="sets[${i}].r=this.value" onkeydown="setEnterKey(event,${i},'r')" style="max-width:80px">
-      <span class="ssep">reps</span>
-      ${sets.length>1?`<button class="delbtn" onclick="removeSet(${i})">×</button>`:''}
-    </div>`).join('');
+  document.getElementById('sets-wrap').innerHTML=sets.map((s,i)=>{
+    const bw=currentExIsBW;
+    return '<div class="sr">'
+      +'<span class="sn">'+(i+1)+'</span>'
+      +(bw
+        ? '<span class="ssep" style="color:var(--text2);font-size:13px">BW</span>'
+          +'<span class="ssep">+</span>'
+          +'<input type="number" id="sw-'+i+'" placeholder="0" value="'+(s.w||'')+'" min="0" title="Extra weight added (leave 0 for bodyweight only)" '
+          +'oninput="sets['+i+'].w=this.value" onkeydown="setEnterKey(event,'+i+','w')" style="max-width:80px">'
+          +'<span class="ssep">lbs ×</span>'
+        : '<input type="number" id="sw-'+i+'" placeholder="lbs" value="'+(s.w||'')+'" min="0" '
+          +'oninput="sets['+i+'].w=this.value" onkeydown="setEnterKey(event,'+i+','w')" style="max-width:85px">'
+          +'<span class="ssep">lbs ×</span>'
+      )
+      +'<input type="number" id="sr-'+i+'" placeholder="reps" value="'+(s.r||'')+'" min="0" '
+      +'oninput="sets['+i+'].r=this.value" onkeydown="setEnterKey(event,'+i+','r')" style="max-width:80px">'
+      +'<span class="ssep">reps</span>'
+      +(sets.length>1?'<button class="delbtn" onclick="removeSet('+i+')">×</button>':'')
+      +'</div>';
+  }).join('');
 }
 window.setEnterKey=(e,i,f)=>{if(e.key!=='Enter')return;e.preventDefault();if(f==='w'){document.getElementById(`sr-${i}`)?.focus();}else{syncSetsFromDOM();sets.push({w:'',r:''});renderSets();setTimeout(()=>document.getElementById(`sw-${i+1}`)?.focus(),30);}};
+window.toggleBW=function(){
+  currentExIsBW=!currentExIsBW;
+  const btn=document.getElementById('bw-toggle-btn');
+  if(btn){ btn.textContent=currentExIsBW?'Bodyweight ✓':'Bodyweight'; btn.style.background=currentExIsBW?'var(--green-bg)':''; btn.style.color=currentExIsBW?'var(--green-tx)':''; }
+  renderSets();
+};
 window.addSet=()=>{syncSetsFromDOM();sets.push({w:'',r:''});renderSets();};
 window.removeSet=i=>{syncSetsFromDOM();sets.splice(i,1);renderSets();};
 function syncSetsFromDOM(){sets.forEach((s,i)=>{const w=document.getElementById(`sw-${i}`),r=document.getElementById(`sr-${i}`);if(w)s.w=w.value;if(r)s.r=r.value;});}
@@ -1054,6 +1096,12 @@ window.selectEx=function(val){
   document.getElementById('wo-name').value=val;closeExDropdown();
   const cat=EX_CAT_MAP[val.toLowerCase()];
   if(cat){const type=CAT_TO_TYPE[cat];if(type)document.getElementById('wo-type').value=type;toggleCardio(val,type==='Cardio'||cat==='Cardio');}
+  // set bodyweight mode
+  const bw=isBodyweight(val);
+  if(currentExIsBW!==bw){ currentExIsBW=bw; renderSets(); }
+  // update BW toggle button
+  const btn=document.getElementById('bw-toggle-btn');
+  if(btn){ btn.textContent=bw?'Bodyweight ✓':'Bodyweight'; btn.style.background=bw?'var(--green-bg)':''; btn.style.color=bw?'var(--green-tx)':''; }
 };
 function closeExDropdown(){document.getElementById('ex-dropdown').classList.remove('open');}
 
@@ -1292,7 +1340,7 @@ function renderFoodLog(){
       <div class="lil">
         <div class="lit">${f.name}</div>
         <div class="mpills">${af.filter(fid=>f[fid]).map(fid=>{const fd=NUTR_FIELDS.find(x=>x.id===fid);return`<span class="mpill${fid==='protein'?' p':''}">${f[fid]}${fd?fd.unit:''} ${fd?fd.label.toLowerCase():fid}</span>`;}).join('')}</div>
-        <div class="lis">${f.date}</div>
+        <div class="lis">${fmtDate(f.date)}</div>
       </div>
       <div class="lir">
         <span class="badge ${mc[f.meal]||'bb'}">${f.meal}</span>
@@ -1459,7 +1507,7 @@ window.openModal=function(mode,id=''){
     }
     const histHtml=instances.length?instances.map(inst=>{
       const detail=inst.isCardio?formatCardio(exName,inst.cardioData):inst.sets.map(s=>s.w+'lbs×'+s.r).join(', ');
-      return '<div class="li"><div class="lil"><div class="lit">'+inst.date+'</div>'
+      return '<div class="li"><div class="lil"><div class="lit">'+fmtDate(inst.date)+'</div>'
         +'<div class="lis">'+detail+(inst.notes?' · '+inst.notes:'')+'</div></div></div>';
     }).join(''):'<div class="empty">No history yet</div>';
     showModal(exName, prText+'<div>'+histHtml+'</div>');
